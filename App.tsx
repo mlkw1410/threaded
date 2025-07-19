@@ -13,14 +13,23 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
+// Import React Navigation components
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
+// Import your new screen (assuming it's in the same folder as App.tsx)
+import ClosetScreen from './ClosetScreen'; // <--- IMPORTANT: Changed from './src/screens/ClosetScreen'
+
 const { width: screenWidth } = Dimensions.get('window');
+import type { ColorValue } from 'react-native';
 
 interface CarouselItem {
   id: string;
   title: string;
   subtitle: string;
   image: string;
-  gradient: string[];
+  gradient: [ColorValue, ColorValue, ...ColorValue[]];
+  onPress?: () => void;
 }
 
 const carouselData: CarouselItem[] = [
@@ -51,6 +60,14 @@ const Carousel: React.FC<{ data: CarouselItem[] }> = ({ data }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const translateX = useRef(new Animated.Value(0)).current;
 
+  const navigation = useNavigation();
+
+  React.useEffect(() => {
+    carouselData[1].onPress = () => navigation.navigate('Closet' as never);
+    // You'd add other onPress functions here as you build those screens
+    // carouselData[0].onPress = () => navigation.navigate('AddItem' as never);
+  }, [navigation]);
+
   const getNextIndex = (index: number) => (index + 1) % data.length;
   const getPreviousIndex = (index: number) => (index - 1 + data.length) % data.length;
 
@@ -59,33 +76,29 @@ const Carousel: React.FC<{ data: CarouselItem[] }> = ({ data }) => {
       return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 10;
     },
     onPanResponderGrant: () => {
-      translateX.setOffset(translateX._value);
+      translateX.extractOffset();
     },
     onPanResponderMove: (evt, gestureState) => {
-      // Reduced resistance for smoother feel
       const resistance = 0.8;
       translateX.setValue(gestureState.dx * resistance);
     },
     onPanResponderRelease: (evt, gestureState) => {
       translateX.flattenOffset();
-      
-      const threshold = screenWidth * 0.25; // Slightly lower threshold
+
+      const threshold = screenWidth * 0.25;
       const velocity = Math.abs(gestureState.vx);
-      
+
       if (gestureState.dx > threshold || (gestureState.dx > 40 && velocity > 0.2)) {
-        // Swipe right - go to previous (circular)
         setCurrentIndex(getPreviousIndex(currentIndex));
       } else if (gestureState.dx < -threshold || (gestureState.dx < -40 && velocity > 0.2)) {
-        // Swipe left - go to next (circular)
         setCurrentIndex(getNextIndex(currentIndex));
       }
-      
-      // Smoother spring animation
+
       Animated.spring(translateX, {
         toValue: 0,
         useNativeDriver: true,
-        tension: 120, // Slightly less tension
-        friction: 8,  // More friction for smoother settle
+        tension: 120,
+        friction: 8,
         overshootClamping: false,
       }).start();
     },
@@ -105,7 +118,7 @@ const Carousel: React.FC<{ data: CarouselItem[] }> = ({ data }) => {
 
   return (
     <View style={styles.carouselContainer}>
-      <Animated.View 
+      <Animated.View
         style={[styles.stackedCarousel, animatedStyle]}
         {...panResponder.panHandlers}
       >
@@ -113,15 +126,13 @@ const Carousel: React.FC<{ data: CarouselItem[] }> = ({ data }) => {
           const isActive = index === currentIndex;
           const isNext = index === getNextIndex(currentIndex);
           const isPrevious = index === getPreviousIndex(currentIndex);
-          
-          // For 3 cards, we only need to show active, next, and previous
-          // The "next2" often overlaps with previous in a 3-card setup
+
           if (!isActive && !isNext && !isPrevious) {
             return null;
           }
 
           return (
-            <View
+            <TouchableOpacity
               key={item.id}
               style={[
                 styles.stackedCard,
@@ -129,6 +140,12 @@ const Carousel: React.FC<{ data: CarouselItem[] }> = ({ data }) => {
                 isNext && styles.nextCard,
                 isPrevious && styles.previousCard,
               ]}
+              onPress={() => {
+                if (isActive && item.onPress) {
+                  item.onPress();
+                }
+              }}
+              activeOpacity={0.8}
             >
               <LinearGradient
                 colors={item.gradient}
@@ -140,11 +157,11 @@ const Carousel: React.FC<{ data: CarouselItem[] }> = ({ data }) => {
                 <Text style={styles.itemTitle}>{item.title}</Text>
                 <Text style={styles.itemSubtitle}>{item.subtitle}</Text>
               </LinearGradient>
-            </View>
+            </TouchableOpacity>
           );
         })}
       </Animated.View>
-      
+
       <View style={styles.pagination}>
         {data.map((_, index) => (
           <TouchableOpacity
@@ -157,17 +174,18 @@ const Carousel: React.FC<{ data: CarouselItem[] }> = ({ data }) => {
           />
         ))}
       </View>
-      
-
     </View>
   );
 };
 
-const App: React.FC = () => {
+
+const Stack = createNativeStackNavigator();
+
+const HomeScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8F7F5" />
-      
+
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Threaded</Text>
         <Text style={styles.headerSubtitle}>Your Digital Closet</Text>
@@ -220,16 +238,46 @@ const App: React.FC = () => {
   );
 };
 
+
+const App: React.FC = () => {
+  return (
+    <NavigationContainer>
+      <Stack.Navigator initialRouteName="Home">
+        <Stack.Screen
+          name="Home"
+          component={HomeScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="Closet"
+          component={ClosetScreen}
+          options={{
+            headerTitle: 'Your Closet',
+            headerStyle: {
+              backgroundColor: '#F8F7F5',
+            },
+            headerTintColor: '#4A4845',
+            headerTitleStyle: {
+              fontWeight: 'bold',
+            },
+            // Removed invalid property 'headerBackTitleVisible'
+          }}
+        />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+};
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F5F3F0', // Soft warm neutral beige
+    backgroundColor: '#F5F3F0',
   },
   header: {
     paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 20,
-    backgroundColor: '#F8F7F5', // Lighter warm neutral for header
+    backgroundColor: '#F8F7F5',
     borderBottomWidth: 1,
     borderBottomColor: '#E8E5E1',
     alignItems: 'center',
@@ -237,13 +285,13 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 28,
     fontWeight: 'bold',
-    color: '#4A4845', // Warm dark neutral
+    color: '#4A4845',
     marginBottom: 2,
     textAlign: 'center',
   },
   headerSubtitle: {
     fontSize: 16,
-    color: '#7A7672', // Muted warm neutral
+    color: '#7A7672',
     textAlign: 'center',
   },
   scrollView: {
@@ -269,28 +317,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     position: 'relative',
   },
-  navButton: {
-    position: 'absolute',
-    top: '50%',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#FFFFFF',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    zIndex: 10,
-    transform: [{ translateY: -20 }],
-  },
-  navButtonText: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#4A4845',
-  },
   stackedCarousel: {
     height: 200,
     width: screenWidth * 0.9,
@@ -301,10 +327,9 @@ const styles = StyleSheet.create({
   stackedCard: {
     position: 'absolute',
     width: screenWidth * 0.75,
-    height: (screenWidth * 0.75) * (468 / 461), // Using 461:468 ratio
+    height: (screenWidth * 0.75) * (468 / 461),
     borderRadius: 20,
     overflow: 'hidden',
-    // Simplified shadow for better performance
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -314,22 +339,17 @@ const styles = StyleSheet.create({
   activeCard: {
     zIndex: 4,
     transform: [{ scale: 1 }],
-    // Reduced shadow for active card
     shadowOpacity: 0.15,
     shadowRadius: 12,
     elevation: 8,
   },
   nextCard: {
     zIndex: 3,
-    transform: [{ scale: 0.92 }, { translateX: 20 }], // Removed rotation for smoother performance
+    transform: [{ scale: 0.92 }, { translateX: 20 }],
   },
   previousCard: {
     zIndex: 3,
-    transform: [{ scale: 0.92 }, { translateX: -20 }], // Removed rotation for smoother performance
-  },
-  next2Card: {
-    zIndex: 2,
-    transform: [{ scale: 0.8 }, { translateX: 45 }, { rotateZ: '15deg' }],
+    transform: [{ scale: 0.92 }, { translateX: -20 }],
   },
   gradientBackground: {
     flex: 1,
@@ -345,13 +365,13 @@ const styles = StyleSheet.create({
   itemTitle: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#4A4845', // Changed to neutral instead of white
+    color: '#4A4845',
     marginBottom: 4,
     textAlign: 'center',
   },
   itemSubtitle: {
     fontSize: 16,
-    color: '#6A6663', // Muted neutral
+    color: '#6A6663',
     opacity: 0.9,
     textAlign: 'center',
   },
@@ -374,6 +394,7 @@ const styles = StyleSheet.create({
   actionGrid: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    flexWrap: 'wrap',
   },
   actionCard: {
     width: '30%',
@@ -389,12 +410,6 @@ const styles = StyleSheet.create({
     elevation: 2,
     borderWidth: 1,
     borderColor: '#EFEDEA',
-  },
-  actionIcon: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#4A4845',
-    marginBottom: 8,
   },
   actionEmoji: {
     fontSize: 32,
